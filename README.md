@@ -44,11 +44,10 @@ $ ./TODO.py random P04            # Chooses a random unmarked script from P04
 $ ./TODO.py random P04 P10 P11    # Chooses a random unmarked script from P04 or P10 or P11
 ```
 
-* Assign a code mark to a script:
+* Add/edit a code mark and general comments to a script:
 
 ```
 $ ./TODO.py mark P01/s1234567.py
-$ ./TODO.py mark P01/s1234567.py --force    # Overwrite an existing mark.
 ```
 
 ## Future work

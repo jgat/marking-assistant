@@ -279,7 +279,7 @@ pick_random.__name__ = 'random'  # Workaround for a bug in the begins library
 
 
 @begin.subcommand
-def mark(script, force=False):
+def mark(script):
     "Mark a student's script."
     if MAIN.scripts is None:
         fail("Marks file not found. Run ./TODO.py init")
