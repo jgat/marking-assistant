@@ -52,7 +52,6 @@ $ ./TODO.py mark P01/s1234567.py
 
 ## Future work
 
-* Enhance the `mark` command so it also takes and saves comments.
 * Add the following commands:
   * `interview`, to make meeting comments and assign a final mark.
   * `export`, to insert the comments and grades into the students' files.
