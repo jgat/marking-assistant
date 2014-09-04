@@ -15,13 +15,15 @@ A command line tool to help mark assignments for a particular course I tutor.
 $ ./TODO.py init
 ```
 
-This will search through each of the `P??` directories to find students' scripts, and create a JSON file to store marks and comments.
+This will search through each of the `P??` directories to find students' scripts, and create a JSON file to store marks and comments (called `marks.json` by default, but the `--marks-file` flag can change that).
 
 Because it's saved as a JSON file, you can store backups! Especially because this tool is in the experimental phase, and so it's not my fault if it loses all your data.
 
+Note: if a marks file already exists, then `./TODO.py init` will only overwrite it if it's given the `--force` flag.
+
 ## Usage
 
-* Get limited help:
+* Get some help:
 
 ```
 $ ./TODO.py [-h|--help]
