@@ -57,6 +57,13 @@ class Script(object):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
 
+    def get_mark(self):
+        "Return the final mark, or the code mark if final mark doesn't exist."
+        if self.final_mark is None:
+            return self.code_mark
+        else:
+            return self.final_mark
+
     def read(self):
         "Read and return the contents of the student's script"
         if self.code is None:
@@ -251,12 +258,18 @@ def status():
         fail("Marks file not found. Run ./TODO.py init")
 
     done = 0
+    print "Student:        Mark    General comments"
     for s in MAIN.scripts:
+        f = s.filename
+        comments = s.comments[:26].replace('\n', ' ')
+        if len(s.comments) > 26:
+            comments += '...'
         if s.is_marked():
-            print GRE + s.filename + DEF
+            mark = s.get_mark()
+            print GRE + "{:<15} {:>4}    {}".format(f, mark, comments).rstrip() + DEF
             done += 1
         else:
-            print RED + s.filename + DEF
+            print RED + "{:<24}{}".format(f, comments).rstrip() + DEF
     print YEL + "Total: {}/{}".format(done, len(MAIN.scripts)) + DEF
 
 
