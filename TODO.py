@@ -9,6 +9,7 @@ import json
 import os
 import random
 import re
+import subprocess
 import sys
 
 import begin
@@ -20,6 +21,23 @@ YEL = "\033[1;33m"
 BLU = "\033[1;34m"
 
 MARKS_FILE = 'marks.json'
+
+EDITOR_FILE = '.mark-comment'
+
+MARK_EDITOR_DEFAULT = '''# Enter mark and comments for {filename}.
+# Lines beginning with # are discarded.
+# If the 'Total: ' line is left blank, no code mark will be assigned.{notice}
+
+Total: {mark}
+
+General comments:
+
+{comments}'''
+
+
+##############################
+# Classes to manage data on students' marks.
+##############################
 
 
 class Script(object):
@@ -33,16 +51,7 @@ class Script(object):
         self.code = None
 
         self.code_mark = self.final_mark = None
-        self.comments = self.meeting_comments = None
-
-    def get_mark(self):
-        "Return the student's final mark or code mark, whichever exists"
-        if self.final_mark is None:
-            return self.code_mark
-        return self.final_mark
-
-    def set_code_mark(self, mark):
-        self.code_mark = mark
+        self.comments = self.meeting_comments = ''
 
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
@@ -77,8 +86,6 @@ class Script(object):
         return "Script({!r})".format(self.filename)
 
 
-##########
-
 class ScriptSet(object):
     "Keeps track of marks data for all students."
     def __init__(self, scripts):
@@ -109,9 +116,9 @@ class ScriptSet(object):
         return any(s.filename == key for s in self.scripts)
 
 
-##########
-# Tools for executing the script, and commands:
-##########
+##############################
+# Tools used by the various commands in the script.
+##############################
 
 class Main(object):
     "Top-level shared functionality"
@@ -131,12 +138,89 @@ class Main(object):
             json.dump(scripts.to_json(), f)
 
 
+def fail(msg, status=1):
+    print >> sys.stderr, msg
+    sys.exit(status)
+
+
+def editor_input(filename, initial):
+    """Open an editor containing the initial text, and return the text edited.
+
+    Fails if the file already exists, but doesn't ever remove the file.
+    """
+    if os.path.exists(filename):
+        fail("Temp file {!r} already exists.\n"
+             "If it doesn't contain anything important, delete it."
+             "".format(filename))
+
+    editor = os.environ.get('EDITOR') or 'vim'
+    with open(filename, 'w') as f:
+        print >> f, initial
+    subprocess.call([editor, filename])
+    with open(filename, 'r') as f:
+        text = f.read()
+    return text
+
+
+def edit_marks(script_name, mark, comments):
+    """Allow the grader to edit marks. Return the new mark and comments."""
+    notice = ''
+    if mark is not None or comments != '':
+        notice = ('\n\n# Note that the following mark/comment already exists '
+                  'for this student.\n# Edits to this will overwrite the '
+                  'existing mark/comment.')
+
+    # Make sure the editor file doesn't contain the word 'None'
+    if mark is None:
+        mark = ''
+
+    initial = MARK_EDITOR_DEFAULT.format(filename=script_name, mark=mark,
+                                         comments=comments, notice=notice)
+    text = editor_input(EDITOR_FILE, initial)
+
+    # Remove lines beginning with #
+    text = '\n'.join(line for line in text.split('\n') if not line.startswith('#'))
+
+    # Find the new mark:
+    for line in text.splitlines():
+        if line.startswith('Total:'):
+            total = line.split(':', 1)[1].strip()
+            if total == '':
+                newmark = None
+            elif total.isdigit():
+                newmark = int(total)
+            else:
+                fail("Error: Mark {!r} is not an integer >= 0.\n"
+                     "Edits are saved in the file: {}\n"
+                     "Exiting without applying changes..."
+                     "".format(total, EDITOR_FILE))
+            break
+    else:
+        fail("Error: No 'Total:' line was found.\n"
+             "Edits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+        sys.exit(1)
+
+    # Find the comments
+    newcomments = text.partition('General comments:')[2].strip()
+    if '"""' in newcomments:
+        fail('Error: Comments cannot contain """.\n'
+             "Edits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+
+    os.remove(EDITOR_FILE)
+    return newmark, newcomments
+
+
+##############################
+# Definitions of each subcommand in the application.
+##############################
+
 @begin.subcommand
 def init(force=False):
     "Initialise the marks file."
     if MAIN.scripts is not None and not force:
-        print >> sys.stderr, "Marks file is already initialised. Use --force to start from scratch."
-        sys.exit(1)
+        fail("Marks file is already initialised. Use --force to start from scratch.")
 
     cwd = os.getcwd()
 
@@ -164,8 +248,7 @@ def init(force=False):
 def status():
     "Show summary of which scripts are marked/unmarked."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
 
     done = 0
     for s in MAIN.scripts:
@@ -181,8 +264,7 @@ def status():
 def pick_random(*prac):
     "Pick a random unmarked script to mark next."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
 
     options = [s for s in MAIN.scripts if not s.is_marked()
                and (not prac or s.prac in prac)]
@@ -191,6 +273,8 @@ def pick_random(*prac):
         print GRE + "All done! \o/" + DEF
     else:
         print random.choice(options).filename
+
+
 pick_random.__name__ = 'random'  # Workaround for a bug in the begins library
 
 
@@ -198,20 +282,16 @@ pick_random.__name__ = 'random'  # Workaround for a bug in the begins library
 def mark(script, force=False):
     "Mark a student's script."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
 
     if script not in MAIN.scripts:
-        print >> sys.stderr, "No script {} in marks file.".format(script)
-        sys.exit(1)
+        fail("No script {} in marks file.".format(script))
 
     script = MAIN.scripts[script]
-    if script.is_marked() and not force:
-        print >> sys.stderr, "Script is already marked. Use --force to overwrite."
-        sys.exit(1)
-
-    x = int(raw_input("Mark /10: "))
-    script.set_code_mark(x)
+    mark, comments = edit_marks(script.filename, script.code_mark,
+                                script.comments)
+    script.code_mark = mark
+    script.comments = comments
     MAIN.save()
 
 
@@ -219,8 +299,7 @@ def mark(script, force=False):
 def interview(script):
     "Make interview comments/marks."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
     raise NotImplementedError()
 
 
@@ -228,9 +307,10 @@ def interview(script):
 def list_students(prac, random=False):
     "List all student names in a given prac. Useful when writing names on whiteboard at start of pracs."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
     raise NotImplementedError()
+
+
 list_students.__name__ = 'list'  # Workaround for a bug in the begins library
 
 
@@ -238,8 +318,7 @@ list_students.__name__ = 'list'  # Workaround for a bug in the begins library
 def export(script):
     "Write the student's marks/comments into their file."
     if MAIN.scripts is None:
-        print >> sys.stderr, "Marks file not found. Run ./TODO.py init"
-        sys.exit(1)
+        fail("Marks file not found. Run ./TODO.py init")
     raise NotImplementedError()
 
 
