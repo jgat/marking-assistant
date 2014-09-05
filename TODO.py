@@ -95,8 +95,17 @@ class Script(object):
 
 class ScriptSet(object):
     "Keeps track of marks data for all students."
-    def __init__(self, scripts):
+    def __init__(self, scripts=None):
+        scripts = scripts or []
         self.scripts = list(scripts)
+
+    def add(self, script):
+        "Adds a script. Silently ignore duplicates"
+        if script.filename not in self:
+            self.scripts.append(script)
+
+    def sort(self):
+        self.scripts.sort(key=lambda x: x.filename)
 
     def to_json(self):
         "Serialise this object."
@@ -105,7 +114,9 @@ class ScriptSet(object):
     @classmethod
     def from_json(cls, data):
         "Deserialise an instance of this class."
-        return cls(Script.from_json(d) for d in data)
+        x = cls(Script.from_json(d) for d in data)
+        x.sort()
+        return x
 
     def __iter__(self):
         return iter(self.scripts)
@@ -139,8 +150,8 @@ class Main(object):
                 self.scripts = ScriptSet.from_json(json.load(f))
 
     def save(self, scripts=None):
-        if scripts is None:
-            scripts = self.scripts
+        scripts = scripts or self.scripts
+        scripts.sort()
         with open(self.filename, 'w') as f:
             json.dump(scripts.to_json(), f)
 
@@ -224,31 +235,38 @@ def edit_marks(script_name, mark, comments):
 ##############################
 
 @begin.subcommand
-def init(force=False):
+def init():
     "Initialise the marks file."
-    if MAIN.scripts is not None and not force:
-        fail("Marks file is already initialised. Use --force to start from scratch.")
-
-    cwd = os.getcwd()
 
     # Find all pracs which are in this folder
     pracs = []
-    for f in os.listdir(cwd):
+    for f in os.listdir(os.getcwd()):
         # Add directories of the form P{01,02,...}
-        full = os.path.join(cwd, f)
-        if os.path.isdir(full) and re.match(r'^P\d{2}$', f):
+        if os.path.isdir(f) and re.match(r'^P\d{2}$', f):
             pracs.append(f)
 
     # Find all student scripts within those pracs
     students = []
     for p in pracs:
         # Add files of the form s*.py
-        for s in os.listdir(p):
-            if re.match(r'^s\d+\.py$', s):
-                students.append(os.path.join(p, s))
+        for f in os.listdir(p):
+            full = os.path.join(p, f)
+            if os.path.isfile(full) and re.match(r'^s\d+\.py$', f):
+                students.append(full)
 
-    s = ScriptSet(Script(s) for s in students)
-    MAIN.save(s)
+    scripts = MAIN.scripts or ScriptSet()
+
+    found = 0
+    for s in students:
+        if s not in scripts:
+            scripts.add(Script(s))
+            print "Found new script: {}".format(s)
+            found += 1
+
+    if not found:
+        print "No new scripts found."
+
+    MAIN.save(scripts)
 
 
 @begin.subcommand

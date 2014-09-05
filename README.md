@@ -19,7 +19,7 @@ This will search through each of the `P??` directories to find students' scripts
 
 Because it's saved as a JSON file, you can store backups! Especially because this tool is in the experimental phase, and so it's not my fault if it loses all your data.
 
-Note: if a marks file already exists, then `./TODO.py init` will only overwrite it if it's given the `--force` flag.
+If a marks file already exists, then `./TODO.py init` will find any new scripts, and leave existing marks unchanged.
 
 ## Usage
 
