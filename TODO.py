@@ -7,7 +7,7 @@ Dependencies (pip install):
 
 import json
 import os
-import random
+from random import choice, shuffle
 import re
 import subprocess
 import sys
@@ -48,7 +48,11 @@ class Script(object):
             raise ValueError("Not a valid student's script: " + filename)
         self.filename = filename
         self.prac = match.group(1)
-        self.code = None
+
+        # Keep some attributes to lazy evaluate
+        self._code = None    # The text of the student's source
+        self._name = None    # The student's name
+        self._id = None      # The student's ID number
 
         self.code_mark = self.final_mark = None
         self.comments = self.meeting_comments = ''
@@ -66,10 +70,30 @@ class Script(object):
 
     def read(self):
         "Read and return the contents of the student's script"
-        if self.code is None:
+        if self._code is None:
             with open(self.filename, 'rU') as f:
-                self.code = f.read()
-        return self.code
+                self._code = f.read()
+        return self._code
+
+    def _get_from_file(self, token):
+        "Retrieve a part of the file which immediately follows the given token"
+        for line in self.read().splitlines():
+            if token in line:
+                return line.partition(token)[2].strip()
+        raise SanityError("{} doesn't contain the string {!r}"
+                          .format(self.filename, token))
+
+    def get_name(self):
+        "Return the student's name as listed in their code"
+        if self._name is None:
+            self._name = self._get_from_file('Student Name:')
+        return self._name
+
+    def get_id(self):
+        "Return the student's ID number listed in their code"
+        if self._id is None:
+            self._id = self._get_from_file('Student Number:')
+        return self._id
 
     def to_json(self):
         "Serialise this object."
@@ -138,6 +162,10 @@ class ScriptSet(object):
 # Tools used by the various commands in the script.
 ##############################
 
+class SanityError(Exception):
+    pass
+
+
 class Main(object):
     "Top-level shared functionality"
     def __init__(self, marks_file):
@@ -169,7 +197,7 @@ def editor_input(filename, initial):
     if os.path.exists(filename):
         fail("Temp file {!r} already exists.\n"
              "If it doesn't contain anything important, delete it."
-             "".format(filename))
+             .format(filename))
 
     editor = os.environ.get('EDITOR') or 'vim'
     with open(filename, 'w') as f:
@@ -197,7 +225,8 @@ def edit_marks(script_name, mark, comments):
     text = editor_input(EDITOR_FILE, initial)
 
     # Remove lines beginning with #
-    text = '\n'.join(line for line in text.split('\n') if not line.startswith('#'))
+    text = '\n'.join(line for line in text.split('\n')
+                     if not line.startswith('#'))
 
     # Find the new mark:
     for line in text.splitlines():
@@ -211,7 +240,7 @@ def edit_marks(script_name, mark, comments):
                 fail("Error: Mark {!r} is not an integer >= 0.\n"
                      "Edits are saved in the file: {}\n"
                      "Exiting without applying changes..."
-                     "".format(total, EDITOR_FILE))
+                     .format(total, EDITOR_FILE))
             break
     else:
         fail("Error: No 'Total:' line was found.\n"
@@ -284,7 +313,8 @@ def status():
             comments += '...'
         if s.is_marked():
             mark = s.get_mark()
-            print GRE + "{:<15} {:>4}    {}".format(f, mark, comments).rstrip() + DEF
+            text = "{:<15} {:>4}    {}".format(f, mark, comments).rstrip()
+            print GRE + text + DEF
             done += 1
         else:
             print RED + "{:<24}{}".format(f, comments).rstrip() + DEF
@@ -303,9 +333,7 @@ def pick_random(*prac):
     if not options:
         print GRE + "All done! \o/" + DEF
     else:
-        print random.choice(options).filename
-
-
+        print choice(options).filename
 pick_random.__name__ = 'random'  # Workaround for a bug in the begins library
 
 
@@ -336,12 +364,22 @@ def interview(script):
 
 @begin.subcommand(name='list')
 def list_students(prac, random=False):
-    "List all student names in a given prac. Useful when writing names on whiteboard at start of pracs."
+    """List all student names in a given prac.
+
+    Useful when writing names on whiteboard at start of pracs.
+    By default, outputs ordered by student ID.
+    --random lists in a random order.
+    """
     if MAIN.scripts is None:
         fail("Marks file not found. Run ./TODO.py init")
-    raise NotImplementedError()
 
+    scripts = [s for s in MAIN.scripts if s.prac == prac]
 
+    if random:
+        shuffle(scripts)
+
+    for s in scripts:
+        print "{:<30}{}".format(s.get_name(), s.get_id())
 list_students.__name__ = 'list'  # Workaround for a bug in the begins library
 
 

@@ -50,12 +50,18 @@ $ ./TODO.py random P04 P10 P11    # Chooses a random unmarked script from P04 or
 $ ./TODO.py mark P01/s1234567.py
 ```
 
+* List names/IDs of students in a given prac: (do this when you need to write their names down on a whiteboard or something)
+
+```
+$ ./TODO.py list P01              # List in order of student number
+$ ./TODO.py list P01 --random     # List in random order
+```
+
 ## Future work
 
 * Add the following commands:
   * `interview`, to make meeting comments and assign a final mark.
   * `export`, to insert the comments and grades into the students' files.
-  * `list`, to output a list of names of students for a given prac (either in sequential order or random order, I don't know yet).
 * Add a command and/or modify `init` to allow for the addition of late scripts.
 
 Stretch goals include:
