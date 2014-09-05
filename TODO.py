@@ -24,15 +24,25 @@ MARKS_FILE = 'marks.json'
 
 EDITOR_FILE = '.mark-comment'
 
-MARK_EDITOR_DEFAULT = '''# Enter mark and comments for {filename}.
+MARK_EDITOR_DEFAULT = '''# Enter mark and comments for {script.filename}.
 # Lines beginning with # are discarded.
-# If the 'Total: ' line is left blank, no code mark will be assigned.{notice}
+# If the 'mark' lines are left blank, no mark will be assigned.{notice}
 
-Total: {mark}
+Code mark: {script._code_mark_render}
 
 General comments:
 
-{comments}'''
+{script.comments}
+
+----------------------------------------------
+
+# This is the mark which will be entered into the student's file.
+Final mark: {script._final_mark_render}
+
+Meeting comments:
+
+{script.meeting_comments}
+'''
 
 
 ##############################
@@ -60,6 +70,20 @@ class Script(object):
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
+
+    def has_edits(self):
+        "Return True if the script has marks/comments"
+        return (self.code_mark is not None or
+                self.final_mark is not None or
+                self.comments != '' or
+                self.meeting_comments != '')
+
+    def update(self, code_mark, final_mark, comments, meeting_comments):
+        "Replace the marks/comments."
+        self.code_mark = code_mark
+        self.final_mark = final_mark
+        self.comments = comments
+        self.meeting_comments = meeting_comments
 
     def get_mark(self):
         "Return the final mark, or the code mark if final mark doesn't exist."
@@ -94,6 +118,15 @@ class Script(object):
         if self._id is None:
             self._id = self._get_from_file('Student Number:')
         return self._id
+
+    # Make sure the editor file doesn't contain the word 'None'
+    @property
+    def _code_mark_render(self):
+        return '' if self.code_mark is None else self.code_mark
+
+    @property
+    def _final_mark_render(self):
+        return '' if self.final_mark is None else self.final_mark
 
     def to_json(self):
         "Serialise this object."
@@ -208,55 +241,63 @@ def editor_input(filename, initial):
     return text
 
 
-def edit_marks(script_name, mark, comments):
+def edit_marks(script):
     """Allow the grader to edit marks. Return the new mark and comments."""
     notice = ''
-    if mark is not None or comments != '':
+    if script.has_edits():
         notice = ('\n\n# Note that the following mark/comment already exists '
                   'for this student.\n# Edits to this will overwrite the '
                   'existing mark/comment.')
 
-    # Make sure the editor file doesn't contain the word 'None'
-    if mark is None:
-        mark = ''
-
-    initial = MARK_EDITOR_DEFAULT.format(filename=script_name, mark=mark,
-                                         comments=comments, notice=notice)
+    initial = MARK_EDITOR_DEFAULT.format(script=script, notice=notice)
     text = editor_input(EDITOR_FILE, initial)
 
     # Remove lines beginning with #
     text = '\n'.join(line for line in text.split('\n')
                      if not line.startswith('#'))
 
-    # Find the new mark:
-    for line in text.splitlines():
-        if line.startswith('Total:'):
-            total = line.split(':', 1)[1].strip()
-            if total == '':
-                newmark = None
-            elif total.isdigit():
-                newmark = int(total)
-            else:
-                fail("Error: Mark {!r} is not an integer >= 0.\n"
-                     "Edits are saved in the file: {}\n"
-                     "Exiting without applying changes..."
-                     .format(total, EDITOR_FILE))
-            break
-    else:
-        fail("Error: No 'Total:' line was found.\n"
+    # Look for the code mark
+    match = re.search(r'^Code mark:[ \t]*(\d*)[ \t]*$', text, re.M)
+    if match is None:
+        fail("Error: No valid 'Code mark' line was found.\nNext time, enter a"
+             " single integer on the same line as 'Code mark:'.\n\n"
              "Edits are saved in the file: {}\n"
              "Exiting without applying changes...".format(EDITOR_FILE))
-        sys.exit(1)
+    code_mark = int(match.group(1)) if match.group(1) != '' else None
 
-    # Find the comments
-    newcomments = text.partition('General comments:')[2].strip()
-    if '"""' in newcomments:
-        fail('Error: Comments cannot contain """.\n'
+    # Look for the final mark
+    match = re.search(r'^Final mark:[ \t]*(\d*)[ \t]*$', text, re.M)
+    if match is None:
+        fail("Error: No valid 'Final mark' line was found.\nNext time, enter a"
+             " single integer on the same line as 'Final mark:'.\n\n"
+             "Edits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+    final_mark = int(match.group(1)) if match.group(1) != '' else None
+
+    # Look for general comments
+    match = re.search(r'^General comments:\s*(.*?)\s*-{40}', text, re.S | re.M)
+    if match is None:
+        fail("Error: No 'General comments:'.\nHow did you break that?"
+             "\n\nEdits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+    comments = match.group(1).strip()
+
+    # Look for meeting comments
+    match = re.search(r'^Meeting comments:\s*(.*)\s*', text, re.S | re.M)
+    if match is None:
+        fail("Error: No 'Meeting comments:' line.\nHow did you break that?"
+             "\n\nEdits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+    meeting_comments = match.group(1).strip()
+
+    if '"""' in comments or '"""' in meeting_comments:
+        fail('Error: Comments cannot contain """.\n\n'
              "Edits are saved in the file: {}\n"
              "Exiting without applying changes...".format(EDITOR_FILE))
 
+    # Yay, the tutor didn't do anything silly.
     os.remove(EDITOR_FILE)
-    return newmark, newcomments
+    script.update(code_mark, final_mark, comments, meeting_comments)
 
 
 ##############################
@@ -346,20 +387,8 @@ def mark(script):
     if script not in MAIN.scripts:
         fail("No script {} in marks file.".format(script))
 
-    script = MAIN.scripts[script]
-    mark, comments = edit_marks(script.filename, script.code_mark,
-                                script.comments)
-    script.code_mark = mark
-    script.comments = comments
+    edit_marks(MAIN.scripts[script])
     MAIN.save()
-
-
-@begin.subcommand
-def interview(script):
-    "Make interview comments/marks."
-    if MAIN.scripts is None:
-        fail("Marks file not found. Run ./TODO.py init")
-    raise NotImplementedError()
 
 
 @begin.subcommand(name='list')

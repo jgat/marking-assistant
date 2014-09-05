@@ -44,7 +44,7 @@ $ ./TODO.py random P04            # Chooses a random unmarked script from P04
 $ ./TODO.py random P04 P10 P11    # Chooses a random unmarked script from P04 or P10 or P11
 ```
 
-* Add/edit a code mark and general comments to a script, using your favourite `$EDITOR`:
+* Add/edit marks and comments to a script, using your favourite `$EDITOR`:
 
 ```
 $ ./TODO.py mark P01/s1234567.py
@@ -61,10 +61,9 @@ $ ./TODO.py list P01 --random     # List in random order
 
 ## Future work
 
-* Add the following commands:
-  * `interview`, to make meeting comments and assign a final mark.
-  * `export`, to insert the comments and grades into the students' files.
-* Add a command and/or modify `init` to allow for the addition of late scripts.
+* Improve `status` to better report various states of a file: (unmarked, marked); (uninterviewed, interviewed, absent), and separate code/final marks.
+* Report postgraduate students in the editor.
+* Add an `export` command to insert the comments and grades into the students' files.
 
 Stretch goals include:
 
