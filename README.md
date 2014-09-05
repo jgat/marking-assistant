@@ -61,7 +61,7 @@ $ ./TODO.py list P01 --random     # List in random order
 
 ## Future work
 
-* Improve `status` to better report various states of a file: (unmarked, marked); (uninterviewed, interviewed, absent), and separate code/final marks.
+* Improve `status` to better report various states of a file: (unmarked, code marked, final marked); (uninterviewed, interviewed, absent).
 * Report postgraduate students in the editor.
 * Add an `export` command to insert the comments and grades into the students' files.
 

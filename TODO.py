@@ -28,7 +28,7 @@ MARK_EDITOR_DEFAULT = '''# Enter mark and comments for {script.filename}.
 # Lines beginning with # are discarded.
 # If the 'mark' lines are left blank, no mark will be assigned.{notice}
 
-Code mark: {script._code_mark_render}
+Code mark: {script.code_mark_render}
 
 General comments:
 
@@ -37,11 +37,9 @@ General comments:
 ----------------------------------------------
 
 # This is the mark which will be entered into the student's file.
-Final mark: {script._final_mark_render}
+Final mark: {script.final_mark_render}
 
-Meeting comments:
-
-{script.meeting_comments}
+Meeting comments: {script.meeting_comments}
 '''
 
 
@@ -85,13 +83,6 @@ class Script(object):
         self.comments = comments
         self.meeting_comments = meeting_comments
 
-    def get_mark(self):
-        "Return the final mark, or the code mark if final mark doesn't exist."
-        if self.final_mark is None:
-            return self.code_mark
-        else:
-            return self.final_mark
-
     def read(self):
         "Read and return the contents of the student's script"
         if self._code is None:
@@ -121,11 +112,11 @@ class Script(object):
 
     # Make sure the editor file doesn't contain the word 'None'
     @property
-    def _code_mark_render(self):
+    def code_mark_render(self):
         return '' if self.code_mark is None else self.code_mark
 
     @property
-    def _final_mark_render(self):
+    def final_mark_render(self):
         return '' if self.final_mark is None else self.final_mark
 
     def to_json(self):
@@ -341,25 +332,31 @@ def init():
 
 @begin.subcommand
 def status():
-    "Show summary of which scripts are marked/unmarked."
+    """Show summary of which scripts are marked/unmarked.
+
+    Colour coded output: green if code is marked, red if not."""
     if MAIN.scripts is None:
         fail("Marks file not found. Run ./TODO.py init")
 
     done = 0
-    print "Student:        Mark    General comments"
+    print "Student:         Code  Final    General comments"
+    print "------------------------------------------------"
     for s in MAIN.scripts:
         f = s.filename
-        comments = s.comments[:26].replace('\n', ' ')
-        if len(s.comments) > 26:
-            comments += '...'
+        comments = s.comments[:16].replace('\n', ' ')
+        if len(s.comments) > 16:
+            comments = comments[:13] + '...'
         if s.is_marked():
-            mark = s.get_mark()
-            text = "{:<15} {:>4}    {}".format(f, mark, comments).rstrip()
-            print GRE + text + DEF
+            col = GRE
             done += 1
         else:
-            print RED + "{:<24}{}".format(f, comments).rstrip() + DEF
-    print YEL + "Total: {}/{}".format(done, len(MAIN.scripts)) + DEF
+            col = RED
+
+        col = GRE if s.is_marked() else RED
+        text = ("{:<15}  {:>4} {:>6}    {}".format(f, s.code_mark_render,
+                s.final_mark_render, comments).rstrip())
+        print col + text + DEF
+    print YEL + "Done: {}/{}".format(done, len(MAIN.scripts)) + DEF
 
 
 @begin.subcommand(name='random')
