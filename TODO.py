@@ -69,6 +69,9 @@ class Script(object):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
 
+    def is_done(self):
+        return self.final_mark is not None
+
     def has_edits(self):
         "Return True if the script has marks/comments"
         return (self.code_mark is not None or
@@ -101,7 +104,11 @@ class Script(object):
     def get_name(self):
         "Return the student's name as listed in their code"
         if self._name is None:
-            self._name = self._get_from_file('Student Name:')
+            try:
+                self._name = self._get_from_file('Student Name:')
+            except SanityError:
+                self._name = ''
+
         return self._name
 
     def get_id(self):
@@ -339,24 +346,52 @@ def status():
         fail("Marks file not found. Run ./TODO.py init")
 
     done = 0
-    print "Student:         Code  Final    General comments"
-    print "------------------------------------------------"
+    marked = 0
+    prac = ''
+    print "Student:                         Code  Final    General comments"
+    print "----------------------------------------------------------------"
     for s in MAIN.scripts:
-        f = s.filename
+        _,_,f = s.filename.partition(os.sep)
+        name = s.get_name()
+
+        if s.prac != prac:
+            prac = s.prac
+            print 
+            print prac
+
+        if len(name) > 15:
+            names = name.split(' ')
+
+            first = names[0]
+
+            if len(names) == 1:
+                name = first
+            else:
+                last = names[-1]
+                name = '{} {}'.format(first[:13], last[0])
+
         comments = s.comments[:16].replace('\n', ' ')
         if len(s.comments) > 16:
             comments = comments[:13] + '...'
-        if s.is_marked():
-            col = GRE
-            done += 1
-        else:
-            col = RED
 
-        col = GRE if s.is_marked() else RED
-        text = ("{:<15}  {:>4} {:>6}    {}".format(f, s.code_mark_render,
-                s.final_mark_render, comments).rstrip())
+        if s.is_done():
+            done += 1
+
+        if s.is_marked():
+            marked += 1
+
+        col = GRE if s.is_done() else (BLU if s.is_marked() else RED)
+
+        if s.is_done() and s.is_marked() \
+                and s.final_mark == 0 and s.code_mark != 0:
+            col = YEL
+
+        text = ("{:<8}  {:<15}  {:>4} {:>6}    {}".format(f, name,
+                s.code_mark_render, s.final_mark_render, comments).rstrip())
         print col + text + DEF
-    print YEL + "Done: {}/{}".format(done, len(MAIN.scripts)) + DEF
+    print
+    print BLU + "Marked: {}/{}".format(marked, len(MAIN.scripts)) + DEF
+    print GRE + "Done: {}/{}".format(done, len(MAIN.scripts)) + DEF
 
 
 @begin.subcommand(name='random')
