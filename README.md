@@ -59,11 +59,22 @@ $ ./TODO.py list P01              # List in order of student number
 $ ./TODO.py list P01 --random     # List in random order
 ```
 
+* Export the marks/comments into the students' files:
+
+```
+$ ./TODO.py export P*/s*.py       # or list individual filenames
+```
+
+At the moment, there is no way to undo or re-export marks/comments. If no
+final mark/meeting comment/general comment exists, that field will be
+silently left blank in the student's script.
+
 ## Future work
 
 * Improve `status` to better report various states of a file: (unmarked, code marked, final marked); (uninterviewed, interviewed, absent).
 * Report postgraduate students in the editor.
-* Add an `export` command to insert the comments and grades into the students' files.
+
+(Also see the open issues.)
 
 Stretch goals include:
 

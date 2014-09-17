@@ -93,6 +93,26 @@ class Script(object):
                 self._code = f.read()
         return self._code
 
+    def export(self):
+        text = self.read()
+        if text.count('Total: \n') != 1:
+            fail("Not exactly one 'Total: \\n' line in " + self.filename)
+        if text.count('Meeting comments: \n') != 1:
+            fail("Not exactly one 'Meeting comments: \\n' line in " + self.filename)
+        if text.count('General comments:\n') != 1:
+            fail("Not exactly one 'General comments:' line in " + self.filename)
+
+        text = text.replace('Total: \n',
+                            'Total: {}\n'.format(self.final_mark_render))
+        text = text.replace('Meeting comments: \n',
+                            'Meeting comments: {}\n'.format(self.meeting_comments))
+        text = text.replace('General comments:\n',
+                            'General comments:\n\n{}\n'.format(self.comments))
+
+        with open(self.filename, 'w') as f:
+            f.write(text)
+            self._code = text
+
     def _get_from_file(self, token):
         "Retrieve a part of the file which immediately follows the given token"
         for line in self.read().splitlines():
@@ -440,16 +460,20 @@ def list_students(prac, random=False):
         shuffle(scripts)
 
     for s in scripts:
-        print "{:<30}{}".format(s.get_name(), s.get_id())
+        print "{:<30}{}".format(s.get_name(), s.filename)
 list_students.__name__ = 'list'  # Workaround for a bug in the begins library
 
 
 @begin.subcommand
-def export(script):
+def export(*scripts):
     "Write the student's marks/comments into their file."
     if MAIN.scripts is None:
         fail("Marks file not found. Run ./TODO.py init")
-    raise NotImplementedError()
+    for s in scripts:
+        if s not in MAIN.scripts:
+            print >> sys.stderr, "No script {} in marks file.".format(script)
+        MAIN.scripts[s].export()
+        print "Exported", s
 
 
 @begin.start
