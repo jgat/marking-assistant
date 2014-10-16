@@ -36,6 +36,12 @@ General comments:
 
 ----------------------------------------------
 
+Checklist:
+
+{script.checklist_render}
+
+----------------------------------------------
+
 # This is the mark which will be entered into the student's file.
 Final mark: {script.final_mark_render}
 
@@ -65,9 +71,19 @@ class Script(object):
         self.code_mark = self.final_mark = None
         self.comments = self.meeting_comments = ''
 
+        with open('checklist.json', 'rU') as f:
+            d = json.loads(f.read())
+            self.checklist = {
+                    header: {name: False for name in arr}
+                        for header,arr in d.iteritems()
+                    }
+
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
+
+    def is_done(self):
+        return self.final_mark is not None
 
     def has_edits(self):
         "Return True if the script has marks/comments"
@@ -76,12 +92,36 @@ class Script(object):
                 self.comments != '' or
                 self.meeting_comments != '')
 
-    def update(self, code_mark, final_mark, comments, meeting_comments):
+    def update(self, code_mark, final_mark, comments, meeting_comments,
+            checklist):
         "Replace the marks/comments."
         self.code_mark = code_mark
         self.final_mark = final_mark
         self.comments = comments
         self.meeting_comments = meeting_comments
+
+        checklist_lines = filter(None, map(str.strip, checklist.splitlines()))
+
+        headers = {}
+
+        for line in checklist_lines:
+            if line.endswith(':'):
+                header = line[:-1]
+
+                if header not in self.checklist:
+                    fail("Invalid checkbox header: {}".format(header))
+            else:
+                match = re.search(r'^\[([x ])\] (.+)$', line)
+
+                if match is None:
+                    fail("Invalid checkbox line: {}".format(line))
+
+                value,name = match.groups()
+
+                if name not in self.checklist[header]:
+                    fail("Unknown checkbox entry: {}".format(name))
+
+                self.checklist[header][name] = value == 'x'
 
     def read(self):
         "Read and return the contents of the student's script"
@@ -121,7 +161,11 @@ class Script(object):
     def get_name(self):
         "Return the student's name as listed in their code"
         if self._name is None:
-            self._name = self._get_from_file('Student Name:')
+            try:
+                self._name = self._get_from_file('Student Name:')
+            except SanityError:
+                self._name = ''
+
         return self._name
 
     def get_id(self):
@@ -139,13 +183,25 @@ class Script(object):
     def final_mark_render(self):
         return '' if self.final_mark is None else self.final_mark
 
+    @property
+    def checklist_render(self):
+        return '\n\n'.join(
+                '{}:\n{}'.format(header, '\n'.join(
+                        '[{}] {}'.format('x' if checked else ' ', name)
+                            for name,checked in sorted(d.iteritems())
+                        )
+                    )
+                for header,d in sorted(self.checklist.iteritems())
+            )
+
     def to_json(self):
         "Serialise this object."
         return {'filename': self.filename,
                 'code_mark': self.code_mark,
                 'final_mark': self.final_mark,
                 'comments': self.comments,
-                'meeting_comments': self.meeting_comments}
+                'meeting_comments': self.meeting_comments,
+                'checklist': self.checklist}
 
     @classmethod
     def from_json(cls, data):
@@ -155,6 +211,7 @@ class Script(object):
         obj.final_mark = data['final_mark']
         obj.comments = data['comments']
         obj.meeting_comments = data['meeting_comments']
+        obj.checklist = data['checklist']
         return obj
 
     def __repr__(self):
@@ -306,9 +363,18 @@ def edit_marks(script):
              "Edits are saved in the file: {}\n"
              "Exiting without applying changes...".format(EDITOR_FILE))
 
+    # Look for and parse the checklist
+    match = re.search(r'^Checklist:\s*(.*?)\s*-{40}', text, re.S | re.M)
+    if match is None:
+        fail("Error: No 'Checklist:' line.\nHow did you break that?"
+             "\n\nEdits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+
+    checklist = match.group(1).strip()
+
     # Yay, the tutor didn't do anything silly.
     os.remove(EDITOR_FILE)
-    script.update(code_mark, final_mark, comments, meeting_comments)
+    script.update(code_mark, final_mark, comments, meeting_comments, checklist)
 
 
 ##############################
@@ -359,27 +425,52 @@ def status():
         fail("Marks file not found. Run ./TODO.py init")
 
     done = 0
-    print "Student:         Code  Final    General comments  Meeting comments"
-    print "------------------------------------------------------------------"
+    marked = 0
+    prac = ''
+    print "Student:                         Code  Final    General comments"
+    print "----------------------------------------------------------------"
     for s in MAIN.scripts:
-        f = s.filename
+        _,_,f = s.filename.partition(os.sep)
+        name = s.get_name()
+
+        if s.prac != prac:
+            prac = s.prac
+            print 
+            print prac
+
+        if len(name) > 15:
+            names = name.split(' ')
+
+            first = names[0]
+
+            if len(names) == 1:
+                name = first
+            else:
+                last = names[-1]
+                name = '{} {}'.format(first[:13], last[0])
+
         comments = s.comments[:16].replace('\n', ' ')
         if len(s.comments) > 16:
             comments = comments[:13] + '...'
-        meeting_comments = s.meeting_comments[:16].replace('\n', ' ')
-        if len(s.meeting_comments) > 16:
-            meeting_comments = meeting_comments[:13] + '...'
-        if s.is_marked():
-            col = GRE
-            done += 1
-        else:
-            col = RED
 
-        col = GRE if s.is_marked() else RED
-        text = ("{:<15}  {:>4} {:>6}    {:<16}  {}".format(f, s.code_mark_render,
-                s.final_mark_render, comments, meeting_comments).rstrip())
+        if s.is_done():
+            done += 1
+
+        if s.is_marked():
+            marked += 1
+
+        col = GRE if s.is_done() else (BLU if s.is_marked() else RED)
+
+        if s.is_done() and s.is_marked() \
+                and s.final_mark == 0 and s.code_mark != 0:
+            col = YEL
+
+        text = ("{:<8}  {:<15}  {:>4} {:>6}    {}".format(f, name,
+                s.code_mark_render, s.final_mark_render, comments).rstrip())
         print col + text + DEF
-    print YEL + "Done: {}/{}".format(done, len(MAIN.scripts)) + DEF
+    print
+    print BLU + "Marked: {}/{}".format(marked, len(MAIN.scripts)) + DEF
+    print GRE + "Done: {}/{}".format(done, len(MAIN.scripts)) + DEF
 
 
 @begin.subcommand(name='random')
