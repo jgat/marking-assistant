@@ -21,6 +21,8 @@ Because it's saved as a JSON file, you can store backups! Especially because thi
 
 If a marks file already exists, then `./TODO.py init` will find any new scripts, and leave existing marks unchanged.
 
+Also add a `checklist.json` file into the current directory.
+
 ## Usage
 
 * Get some help:
