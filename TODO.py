@@ -36,6 +36,12 @@ General comments:
 
 ----------------------------------------------
 
+Checklist:
+
+{script.checklist_render}
+
+----------------------------------------------
+
 # This is the mark which will be entered into the student's file.
 Final mark: {script.final_mark_render}
 
@@ -46,6 +52,36 @@ Meeting comments: {script.meeting_comments}
 ##############################
 # Classes to manage data on students' marks.
 ##############################
+
+
+class CheckboxState(object):
+    ON = 'x'
+    OFF = ' '
+    INTERMEDIATE = '-'
+
+    STATES = (ON, OFF, INTERMEDIATE)
+
+    def __init__(self):
+        self._state = CheckboxState.INTERMEDIATE
+
+    def __str__(self):
+        return self.state
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, state):
+        assert state in CheckboxState.STATES
+        self._state = state
+
+    @classmethod
+    def from_string(self, s):
+        obj = CheckboxState()
+        obj.state = s
+
+        return obj
 
 
 class Script(object):
@@ -65,6 +101,13 @@ class Script(object):
         self.code_mark = self.final_mark = None
         self.comments = self.meeting_comments = ''
 
+        with open('checklist.json', 'rU') as f:
+            d = json.loads(f.read())
+            self.checklist = {
+                    header: {name: CheckboxState() for name in arr}
+                        for header,arr in d.iteritems()
+                    }
+
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
@@ -79,12 +122,38 @@ class Script(object):
                 self.comments != '' or
                 self.meeting_comments != '')
 
-    def update(self, code_mark, final_mark, comments, meeting_comments):
+    def update(self, code_mark, final_mark, comments, meeting_comments,
+            checklist):
         "Replace the marks/comments."
         self.code_mark = code_mark
         self.final_mark = final_mark
         self.comments = comments
         self.meeting_comments = meeting_comments
+
+        checklist_lines = filter(None, map(str.strip, checklist.splitlines()))
+
+        headers = {}
+
+        for line in checklist_lines:
+            if line.endswith(':'):
+                header = line[:-1]
+
+                if header not in self.checklist:
+                    fail("Invalid checkbox header: {}".format(header))
+            else:
+                states = ''.join(CheckboxState.STATES)
+                pattern = r'^\[([{}])\] (.+)$'.format(states)
+                match = re.search(pattern, line)
+
+                if match is None:
+                    fail("Invalid checkbox line: {}".format(line))
+
+                value,name = match.groups()
+
+                if name not in self.checklist[header]:
+                    fail("Unknown checkbox entry: {}".format(name))
+
+                self.checklist[header][name] = CheckboxState.from_string(value)
 
     def read(self):
         "Read and return the contents of the student's script"
@@ -146,13 +215,31 @@ class Script(object):
     def final_mark_render(self):
         return '' if self.final_mark is None else self.final_mark
 
+    @property
+    def checklist_render(self):
+        return '\n\n'.join(
+                '{}:\n{}'.format(header, '\n'.join(
+                        '[{}] {}'.format(state, name)
+                            for name,state in sorted(d.iteritems())
+                        )
+                    )
+                for header,d in sorted(self.checklist.iteritems())
+            )
+
     def to_json(self):
         "Serialise this object."
+        checklist = {
+                header: {
+                    name: str(state) for name,state in d.iteritems()
+                } for header,d in self.checklist.iteritems()
+            }
+
         return {'filename': self.filename,
                 'code_mark': self.code_mark,
                 'final_mark': self.final_mark,
                 'comments': self.comments,
-                'meeting_comments': self.meeting_comments}
+                'meeting_comments': self.meeting_comments,
+                'checklist': checklist}
 
     @classmethod
     def from_json(cls, data):
@@ -162,6 +249,14 @@ class Script(object):
         obj.final_mark = data['final_mark']
         obj.comments = data['comments']
         obj.meeting_comments = data['meeting_comments']
+
+        obj.checklist = {
+                header: {
+                    name: CheckboxState.from_string(s)
+                        for name,s in d.iteritems()
+                    } for header,d in data['checklist'].iteritems()
+                }
+
         return obj
 
     def __repr__(self):
@@ -313,9 +408,18 @@ def edit_marks(script):
              "Edits are saved in the file: {}\n"
              "Exiting without applying changes...".format(EDITOR_FILE))
 
+    # Look for and parse the checklist
+    match = re.search(r'^Checklist:\s*(.*?)\s*-{40}', text, re.S | re.M)
+    if match is None:
+        fail("Error: No 'Checklist:' line.\nHow did you break that?"
+             "\n\nEdits are saved in the file: {}\n"
+             "Exiting without applying changes...".format(EDITOR_FILE))
+
+    checklist = match.group(1).strip()
+
     # Yay, the tutor didn't do anything silly.
     os.remove(EDITOR_FILE)
-    script.update(code_mark, final_mark, comments, meeting_comments)
+    script.update(code_mark, final_mark, comments, meeting_comments, checklist)
 
 
 ##############################
