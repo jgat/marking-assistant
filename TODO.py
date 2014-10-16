@@ -21,6 +21,7 @@ YEL = "\033[1;33m"
 BLU = "\033[1;34m"
 
 MARKS_FILE = 'marks.json'
+CHECKLIST_FILE = 'checklist.json'
 
 EDITOR_FILE = '.mark-comment'
 
@@ -101,12 +102,13 @@ class Script(object):
         self.code_mark = self.final_mark = None
         self.comments = self.meeting_comments = ''
 
-        with open('checklist.json', 'rU') as f:
-            d = json.loads(f.read())
+        if MAIN.checklist is not None:
             self.checklist = {
                     header: {name: CheckboxState() for name in arr}
-                        for header,arr in d.iteritems()
+                        for header,arr in MAIN.checklist.iteritems()
                     }
+        else:
+            self.checklist = {}
 
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
@@ -314,14 +316,20 @@ class SanityError(Exception):
 
 class Main(object):
     "Top-level shared functionality"
-    def __init__(self, marks_file):
+    def __init__(self, marks_file, checklist_file):
         self.filename = marks_file
+        self.checklist_file = checklist_file
         self.scripts = None
+        self.checklist = None
 
     def load(self):
         if os.path.exists(self.filename):
             with open(self.filename, 'rU') as f:
                 self.scripts = ScriptSet.from_json(json.load(f))
+
+        if os.path.exists(self.checklist_file):
+            with open(self.checklist_file, 'rU') as f:
+                self.checklist = json.load(f)
 
     def save(self, scripts=None):
         scripts = scripts or self.scripts
@@ -581,9 +589,9 @@ def export(*scripts):
 
 
 @begin.start
-def run(marks_file=MARKS_FILE):
+def run(marks_file=MARKS_FILE, checklist_file=CHECKLIST_FILE):
     "Marking assistant."
     # globals are ok if you know what you're doing
     global MAIN
-    MAIN = Main(marks_file)
+    MAIN = Main(marks_file, checklist_file)
     MAIN.load()
