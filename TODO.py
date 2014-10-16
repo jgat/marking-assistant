@@ -55,6 +55,36 @@ Meeting comments: {script.meeting_comments}
 ##############################
 
 
+class CheckboxState(object):
+    ON = 'x'
+    OFF = ' '
+    INTERMEDIATE = '-'
+
+    STATES = (ON, OFF, INTERMEDIATE)
+
+    def __init__(self):
+        self._state = CheckboxState.INTERMEDIATE
+
+    def __str__(self):
+        return self.state
+
+    @property
+    def state(self):
+        return self._state
+
+    @state.setter
+    def state(self, state):
+        assert state in CheckboxState.STATES
+        self._state = state
+
+    @classmethod
+    def from_string(self, s):
+        obj = CheckboxState()
+        obj.state = s
+
+        return obj
+
+
 class Script(object):
     "Keep track of marks/comments for a single student's script"
     def __init__(self, filename):
@@ -74,7 +104,7 @@ class Script(object):
 
         if MAIN.checklist is not None:
             self.checklist = {
-                    header: {name: False for name in arr}
+                    header: {name: CheckboxState() for name in arr}
                         for header,arr in MAIN.checklist.iteritems()
                     }
         else:
@@ -113,7 +143,9 @@ class Script(object):
                 if header not in self.checklist:
                     fail("Invalid checkbox header: {}".format(header))
             else:
-                match = re.search(r'^\[([x ])\] (.+)$', line)
+                states = ''.join(CheckboxState.STATES)
+                pattern = r'^\[([{}])\] (.+)$'.format(states)
+                match = re.search(pattern, line)
 
                 if match is None:
                     fail("Invalid checkbox line: {}".format(line))
@@ -123,7 +155,7 @@ class Script(object):
                 if name not in self.checklist[header]:
                     fail("Unknown checkbox entry: {}".format(name))
 
-                self.checklist[header][name] = value == 'x'
+                self.checklist[header][name] = CheckboxState.from_string(value)
 
     def read(self):
         "Read and return the contents of the student's script"
@@ -189,8 +221,8 @@ class Script(object):
     def checklist_render(self):
         return '\n\n'.join(
                 '{}:\n{}'.format(header, '\n'.join(
-                        '[{}] {}'.format('x' if checked else ' ', name)
-                            for name,checked in sorted(d.iteritems())
+                        '[{}] {}'.format(state, name)
+                            for name,state in sorted(d.iteritems())
                         )
                     )
                 for header,d in sorted(self.checklist.iteritems())
@@ -198,12 +230,18 @@ class Script(object):
 
     def to_json(self):
         "Serialise this object."
+        checklist = {
+                header: {
+                    name: str(state) for name,state in d.iteritems()
+                } for header,d in self.checklist.iteritems()
+            }
+
         return {'filename': self.filename,
                 'code_mark': self.code_mark,
                 'final_mark': self.final_mark,
                 'comments': self.comments,
                 'meeting_comments': self.meeting_comments,
-                'checklist': self.checklist}
+                'checklist': checklist}
 
     @classmethod
     def from_json(cls, data):
@@ -213,7 +251,14 @@ class Script(object):
         obj.final_mark = data['final_mark']
         obj.comments = data['comments']
         obj.meeting_comments = data['meeting_comments']
-        obj.checklist = data['checklist']
+
+        obj.checklist = {
+                header: {
+                    name: CheckboxState.from_string(s)
+                        for name,s in d.iteritems()
+                    } for header,d in data['checklist'].iteritems()
+                }
+
         return obj
 
     def __repr__(self):
