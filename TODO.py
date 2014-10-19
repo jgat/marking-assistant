@@ -122,7 +122,9 @@ class Script(object):
         return (self.code_mark is not None or
                 self.final_mark is not None or
                 self.comments != '' or
-                self.meeting_comments != '')
+                self.meeting_comments != '' or
+                any(any(x.state != x.INTERMEDIATE for x in d.itervalues())
+                    for d in self.checklist.itervalues()))
 
     def update(self, code_mark, final_mark, comments, meeting_comments,
             checklist):
@@ -335,7 +337,7 @@ class Main(object):
         scripts = scripts or self.scripts
         scripts.sort()
         with open(self.filename, 'w') as f:
-            json.dump(scripts.to_json(), f)
+            json.dump(scripts.to_json(), f, indent=4, separators=(',', ': '))
 
 
 def fail(msg, status=1):
@@ -488,7 +490,7 @@ def status():
 
         if s.prac != prac:
             prac = s.prac
-            print 
+            print
             print prac
 
         if len(name) > 15:
