@@ -110,6 +110,10 @@ class Script(object):
         else:
             self.checklist = {}
 
+    def is_postgrad(self):
+        "Return True if the student is a postgraduate"
+        return '##### CSSE7030 #####' in self.read()
+
     def is_marked(self):
         "Return True if the 'code mark' has been recorded."
         return self.code_mark is not None
@@ -368,9 +372,10 @@ def edit_marks(script):
     """Allow the grader to edit marks. Return the new mark and comments."""
     notice = ''
     if script.has_edits():
-        notice = ('\n\n# Note that the following mark/comment already exists '
-                  'for this student.\n# Edits to this will overwrite the '
-                  'existing mark/comment.')
+        notice += ('\n\n# Edits to this will overwrite the following'
+                  'mark/comments:')
+    if script.is_postgrad():
+        notice += ('\n\n##### CSSE7030 #####')
 
     initial = MARK_EDITOR_DEFAULT.format(script=script, notice=notice)
     text = editor_input(EDITOR_FILE, initial)
